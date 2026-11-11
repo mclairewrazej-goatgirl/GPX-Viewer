@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPX Viewer sample (made-up data)" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Example hike near Banff (made-up test data)</name>
+    <time>2025-07-12T14:00:00Z</time>
+  </metadata>
+  <wpt lat="51.178400" lon="-115.567000">
+    <ele>1395</ele>
+    <time>2025-07-12T14:00:00Z</time>
+    <name>Trailhead</name>
+    <desc>Sample start waypoint</desc>
+  </wpt>
+  <wpt lat="51.186200" lon="-115.552500">
+    <ele>1695</ele>
+    <time>2025-07-12T14:57:00Z</time>
+    <name>Viewpoint</name>
+    <desc>Sample end waypoint</desc>
+  </wpt>
+  <trk>
+    <name>Example track</name>
+    <trkseg>
+      <trkpt lat="51.178400" lon="-115.566600"><ele>1395.0</ele><time>2025-07-12T14:00:00Z</time></trkpt>
+      <trkpt lat="51.179096" lon="-115.565885"><ele>1406.4</ele><time>2025-07-12T14:03:00Z</time></trkpt>
+      <trkpt lat="51.179723" lon="-115.565255"><ele>1420.6</ele><time>2025-07-12T14:06:00Z</time></trkpt>
+      <trkpt lat="51.180230" lon="-115.564677"><ele>1438.7</ele><time>2025-07-12T14:09:00Z</time></trkpt>
+      <trkpt lat="51.180592" lon="-115.564108"><ele>1459.1</ele><time>2025-07-12T14:12:00Z</time></trkpt>
+      <trkpt lat="51.180821" lon="-115.563500"><ele>1479.0</ele><time>2025-07-12T14:15:00Z</time></trkpt>
+      <trkpt lat="51.180962" lon="-115.562816"><ele>1495.6</ele><time>2025-07-12T14:18:00Z</time></trkpt>
+      <trkpt lat="51.181079" lon="-115.562036"><ele>1508.4</ele><time>2025-07-12T14:21:00Z</time></trkpt>
+      <trkpt lat="51.181243" lon="-115.561166"><ele>1519.4</ele><time>2025-07-12T14:24:00Z</time></trkpt>
+      <trkpt lat="51.181513" lon="-115.560230"><ele>1531.6</ele><time>2025-07-12T14:27:00Z</time></trkpt>
+      <trkpt lat="51.181924" lon="-115.559270"><ele>1547.4</ele><time>2025-07-12T14:30:00Z</time></trkpt>
+      <trkpt lat="51.182474" lon="-115.558334"><ele>1566.7</ele><time>2025-07-12T14:33:00Z</time></trkpt>
+      <trkpt lat="51.183131" lon="-115.557464"><ele>1587.3</ele><time>2025-07-12T14:36:00Z</time></trkpt>
+      <trkpt lat="51.183836" lon="-115.556684"><ele>1606.1</ele><time>2025-07-12T14:39:00Z</time></trkpt>
+      <trkpt lat="51.184516" lon="-115.556000"><ele>1621.1</ele><time>2025-07-12T14:42:00Z</time></trkpt>
+      <trkpt lat="51.185107" lon="-115.555392"><ele>1632.8</ele><time>2025-07-12T14:45:00Z</time></trkpt>
+      <trkpt lat="51.185566" lon="-115.554823"><ele>1643.9</ele><time>2025-07-12T14:48:00Z</time></trkpt>
+      <trkpt lat="51.185881" lon="-115.554245"><ele>1657.4</ele><time>2025-07-12T14:51:00Z</time></trkpt>
+      <trkpt lat="51.186075" lon="-115.553615"><ele>1674.8</ele><time>2025-07-12T14:54:00Z</time></trkpt>
+      <trkpt lat="51.186200" lon="-115.552900"><ele>1695.0</ele><time>2025-07-12T14:57:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

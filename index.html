@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPX Viewer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root { --bg:#f7f7f5; --panel:#fff; --ink:#1f2421; --muted:#6b726e; --line:#e2e4e1; --accent:#2f6b4f; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  #app { display:flex; height:100%; }
+  #sidebar { width:320px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  header { padding:16px 16px 12px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0 0 4px; }
+  header p { margin:0; font-size:12px; color:var(--muted); }
+  #drop { margin:12px 16px; padding:18px 12px; border:2px dashed var(--line); border-radius:10px; text-align:center; font-size:13px; color:var(--muted); cursor:pointer; transition:.15s; }
+  #drop:hover, #drop.over { border-color:var(--accent); color:var(--accent); background:#f1f7f3; }
+  #drop strong { color:var(--accent); }
+  #file { display:none; }
+  .sortbar { display:flex; align-items:center; gap:8px; padding:0 16px 10px; font-size:12px; color:var(--muted); }
+  .sortbar select { flex:1; font-size:12px; padding:5px 6px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
+  .date { font-size:12px; color:var(--accent); font-weight:600; margin-top:4px; }
+  .nodate { color:var(--muted); font-weight:400; font-style:italic; }
+  .coords { margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; line-height:1.5; }
+  .coords span { display:inline-block; width:58px; color:#888; font-family:system-ui,sans-serif; }
+  .readout { background:rgba(255,255,255,.92); padding:6px 10px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.2); }
+  .readout .coords { margin:0; }
+  #list { flex:1; overflow-y:auto; padding:0 16px 16px; }
+  .empty { font-size:13px; color:var(--muted); text-align:center; margin-top:24px; }
+  .item { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .item.hidden { opacity:.5; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .swatch { width:14px; height:14px; border-radius:50%; flex-shrink:0; border:none; padding:0; cursor:pointer; }
+  .name { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .btn { border:none; background:none; cursor:pointer; color:var(--muted); font-size:13px; padding:2px 4px; border-radius:4px; }
+  .btn:hover { background:#eef0ed; color:var(--ink); }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; margin-top:8px; font-size:12px; color:var(--muted); }
+  .stats b { color:var(--ink); font-weight:600; }
+  .sub { font-size:11px; color:var(--muted); margin-top:6px; }
+  footer { padding:10px 16px; border-top:1px solid var(--line); display:flex; gap:8px; }
+  footer button { flex:1; font-size:12px; padding:7px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
+  footer button:hover { border-color:var(--accent); color:var(--accent); }
+  #map { flex:1; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#2a2f2c; color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; display:none; z-index:2000; }
+  .leaflet-popup-content { font-size:12px; }
+  .leaflet-popup-content h4 { margin:0 0 4px; font-size:13px; }
+  @media (max-width:700px) {
+    #app { flex-direction:column-reverse; }
+    #sidebar { width:100%; height:42%; border-right:none; border-top:1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <header>
+      <h1>GPX Viewer</h1>
+      <p>Files stay in your browser. Nothing is uploaded to a server.</p>
+    </header>
+    <label id="drop" for="file"><strong>Choose GPX files</strong> or drag them here</label>
+    <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple>
+    <div class="sortbar">
+      <label for="sort">Sort</label>
+      <select id="sort">
+        <option value="date-asc">Date: oldest first</option>
+        <option value="date-desc">Date: newest first</option>
+        <option value="name">Name (A–Z)</option>
+        <option value="added">Order added</option>
+      </select>
+    </div>
+    <div id="list"><div class="empty">No files loaded yet.</div></div>
+    <footer>
+      <button id="fitAll">Zoom to all</button>
+      <button id="clearAll">Clear all</button>
+    </footer>
+  </aside>
+  <div id="map"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+const COLORS = ['#d7263d','#1b76d1','#2f9e44','#f08c00','#7048e8','#0ca678','#e64980','#495057','#c2255c','#1098ad'];
+let colorIdx = 0;
+const files = []; // {id, name, color, layer, visible, stats}
+
+// ---------- Map ----------
+// OSM's own servers require the page to be served from a website (they block file:// pages),
+// so when opened as a local file we default to CARTO's OSM-based map instead.
+const isLocalFile = location.protocol === 'file:';
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+});
+const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  maxZoom: 20, subdomains: 'abcd',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+});
+const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17, attribution: 'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
+});
+const sat = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, maxNativeZoom: 18, attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+});
+const s2 = L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg', {
+  maxZoom: 19, maxNativeZoom: 15,
+  attribution: '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2020)'
+});
+const labels = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, maxNativeZoom: 18, attribution: 'Labels &copy; Esri'
+});
+const map = L.map('map', { layers: [isLocalFile ? carto : osm] }).setView([51.18, -115.57], 10);
+const baseLayers = { 'OpenStreetMap (CARTO)': carto, 'OpenStreetMap (standard)': osm, 'OpenTopoMap': topo, 'Satellite (Esri)': sat, 'Satellite (Sentinel-2, 10 m)': s2 };
+L.control.layers(baseLayers, { 'Place labels': labels }).addTo(map);
+
+// Tell the user when a map layer's tiles fail to load (once per layer)
+Object.entries({ ...baseLayers, 'Place labels': labels }).forEach(([name, layer]) => {
+  let warned = false;
+  layer.on('tileerror', () => {
+    if (warned) return; warned = true;
+    toast(layer === osm && isLocalFile
+      ? 'OpenStreetMap (standard) only works when this page is hosted on a website. Use OpenStreetMap (CARTO) instead.'
+      : `"${name}" tiles aren't loading. Your network may be blocking that server; try another layer.`);
+  });
+  layer.on('add', () => { warned = false; });
+});
+L.control.scale({ imperial: false }).addTo(map);
+
+// Live cursor coordinates
+const Readout = L.Control.extend({
+  options: { position: 'bottomright' },
+  onAdd() { this._div = L.DomUtil.create('div', 'readout'); this._div.innerHTML = '<div class="coords">Move over the map</div>'; return this._div; },
+  update(ll) { this._div.innerHTML = coordHTML(ll.lat, ll.lng); }
+});
+const readout = new Readout().addTo(map);
+map.on('mousemove', e => readout.update(e.latlng));
+
+// Click anywhere on the map for a coordinate popup
+map.on('click', e => {
+  L.popup().setLatLng(e.latlng).setContent(`<h4>Location</h4>${coordHTML(e.latlng.lat, e.latlng.lng)}`).openOn(map);
+});
+
+// ---------- GPX parsing ----------
+function parseGPX(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('Not valid XML');
+  const byTag = (el, tag) => Array.from(el.getElementsByTagNameNS('*', tag));
+  const child = (el, tag) => byTag(el, tag)[0];
+  const txt = (el, tag) => { const c = child(el, tag); return c ? c.textContent.trim() : ''; };
+  const pt = el => ({
+    lat: parseFloat(el.getAttribute('lat')),
+    lon: parseFloat(el.getAttribute('lon')),
+    ele: child(el, 'ele') ? parseFloat(txt(el, 'ele')) : null,
+    time: child(el, 'time') ? new Date(txt(el, 'time')) : null
+  });
+
+  const lines = [];
+  byTag(doc, 'trk').forEach(trk => {
+    const name = txt(trk, 'name');
+    byTag(trk, 'trkseg').forEach(seg => {
+      const pts = byTag(seg, 'trkpt').map(pt).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+      if (pts.length) lines.push({ kind: 'Track', name, pts });
+    });
+  });
+  byTag(doc, 'rte').forEach(rte => {
+    const pts = byTag(rte, 'rtept').map(pt).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+    if (pts.length) lines.push({ kind: 'Route', name: txt(rte, 'name'), pts });
+  });
+  const wpts = byTag(doc, 'wpt').map(w => ({ ...pt(w), name: txt(w, 'name'), desc: txt(w, 'desc') || txt(w, 'cmt') }))
+    .filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+
+  // File date: earliest point time, falling back to <metadata><time>
+  let date = null;
+  [...lines.flatMap(l => l.pts), ...wpts].forEach(p => {
+    if (p.time && !isNaN(p.time) && (!date || p.time < date)) date = p.time;
+  });
+  if (!date) {
+    const meta = child(doc, 'metadata');
+    if (meta && child(meta, 'time')) { const d = new Date(txt(meta, 'time')); if (!isNaN(d)) date = d; }
+  }
+  return { lines, wpts, date };
+}
+
+// ---------- Coordinates (WGS84 -> UTM) ----------
+function toUTM(lat, lon) {
+  if (lat < -80 || lat > 84) return null;
+  let zone = Math.floor((lon + 180) / 6) + 1;
+  if (zone > 60) zone = 60;
+  if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) zone = 32;
+  if (lat >= 72 && lat < 84) {
+    if (lon >= 0 && lon < 9) zone = 31; else if (lon >= 9 && lon < 21) zone = 33;
+    else if (lon >= 21 && lon < 33) zone = 35; else if (lon >= 33 && lon < 42) zone = 37;
+  }
+  const a = 6378137, f = 1 / 298.257223563, k0 = 0.9996;
+  const e2 = f * (2 - f), ep2 = e2 / (1 - e2), rad = Math.PI / 180;
+  const phi = lat * rad, lam = lon * rad, lam0 = ((zone - 1) * 6 - 180 + 3) * rad;
+  const sin = Math.sin(phi), cos = Math.cos(phi), tan = Math.tan(phi);
+  const N = a / Math.sqrt(1 - e2 * sin * sin), T = tan * tan, C = ep2 * cos * cos, A = cos * (lam - lam0);
+  const M = a * ((1 - e2/4 - 3*e2*e2/64 - 5*e2**3/256) * phi
+    - (3*e2/8 + 3*e2*e2/32 + 45*e2**3/1024) * Math.sin(2*phi)
+    + (15*e2*e2/256 + 45*e2**3/1024) * Math.sin(4*phi)
+    - (35*e2**3/3072) * Math.sin(6*phi));
+  const easting = k0 * N * (A + (1 - T + C) * A**3 / 6 + (5 - 18*T + T*T + 72*C - 58*ep2) * A**5 / 120) + 500000;
+  let northing = k0 * (M + N * tan * (A*A/2 + (5 - T + 9*C + 4*C*C) * A**4 / 24
+    + (61 - 58*T + T*T + 600*C - 330*ep2) * A**6 / 720));
+  if (lat < 0) northing += 10000000;
+  const band = 'CDEFGHJKLMNPQRSTUVWXX'[Math.floor((lat + 80) / 8)];
+  return { zone, band, easting, northing };
+}
+function fmtLatLon(lat, lon) { return `${lat.toFixed(6)}, ${lon.toFixed(6)}`; }
+function fmtUTM(lat, lon) {
+  const u = toUTM(lat, lon);
+  return u ? `${u.zone}${u.band} ${Math.round(u.easting)}E ${Math.round(u.northing)}N` : 'n/a (polar)';
+}
+function coordHTML(lat, lon) {
+  return `<div class="coords"><span>Lat/Long</span> ${fmtLatLon(lat, lon)}<br><span>UTM</span> ${fmtUTM(lat, lon)}</div>`;
+}
+
+function haversine(a, b) {
+  const R = 6371000, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function lineStats(pts) {
+  let dist = 0, gain = 0, loss = 0, minE = Infinity, maxE = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (p.ele != null && !isNaN(p.ele)) { minE = Math.min(minE, p.ele); maxE = Math.max(maxE, p.ele); }
+    if (i) {
+      dist += haversine(pts[i-1], p);
+      const e0 = pts[i-1].ele, e1 = p.ele;
+      if (e0 != null && e1 != null && !isNaN(e0) && !isNaN(e1)) { const d = e1 - e0; d > 0 ? gain += d : loss -= d; }
+    }
+  }
+  const times = pts.map(p => p.time).filter(t => t && !isNaN(t));
+  const start = times.length ? times[0] : null, end = times.length ? times[times.length-1] : null;
+  return { dist, gain, loss, minE, maxE, start, end, n: pts.length };
+}
+
+function combine(statsList) {
+  const c = { dist:0, gain:0, loss:0, minE:Infinity, maxE:-Infinity, start:null, end:null, n:0 };
+  statsList.forEach(s => {
+    c.dist += s.dist; c.gain += s.gain; c.loss += s.loss; c.n += s.n;
+    c.minE = Math.min(c.minE, s.minE); c.maxE = Math.max(c.maxE, s.maxE);
+    if (s.start && (!c.start || s.start < c.start)) c.start = s.start;
+    if (s.end && (!c.end || s.end > c.end)) c.end = s.end;
+  });
+  return c;
+}
+
+// ---------- Formatting ----------
+const fmtKm = m => m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+const fmtM = m => isFinite(m) ? Math.round(m).toLocaleString() + ' m' : '—';
+function fmtDur(ms) {
+  if (!ms || ms < 0) return '—';
+  const m = Math.round(ms / 60000), h = Math.floor(m / 60);
+  return h ? `${h}h ${String(m % 60).padStart(2,'0')}m` : `${m}m`;
+}
+const fmtDate = d => d ? d.toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' }) : '';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------- Adding files ----------
+function addFile(name, text) {
+  let parsed;
+  try { parsed = parseGPX(text); } catch (e) { toast(`Couldn't read ${name}: ${e.message}`); return; }
+  if (!parsed.lines.length && !parsed.wpts.length) { toast(`${name} has no tracks, routes or waypoints`); return; }
+
+  const color = COLORS[colorIdx++ % COLORS.length];
+  const group = L.featureGroup();
+  const statsList = [];
+
+  parsed.lines.forEach(line => {
+    const s = lineStats(line.pts);
+    statsList.push(s);
+    const poly = L.polyline(line.pts.map(p => [p.lat, p.lon]), {
+      color, weight: 4, opacity: .85, bubblingMouseEvents: false, dashArray: line.kind === 'Route' ? '8 6' : null
+    });
+    poly.on('click', e => {
+      // nearest recorded point to the click
+      let best = line.pts[0], bd = Infinity;
+      line.pts.forEach(p => { const d = (p.lat - e.latlng.lat)**2 + (p.lon - e.latlng.lng)**2; if (d < bd) { bd = d; best = p; } });
+      L.popup().setLatLng([best.lat, best.lon]).setContent(
+        `<h4>${esc(line.name || name)}</h4>${line.kind} · ${fmtKm(s.dist)} · ↑ ${fmtM(s.gain)} ↓ ${fmtM(s.loss)}
+        ${s.start ? `<br>${fmtDate(s.start)}` : ''}
+        <br><br><b>Nearest point</b>${best.time && !isNaN(best.time) ? ' · ' + fmtDate(best.time) : ''}
+        ${best.ele != null && !isNaN(best.ele) ? `<br>Elev: ${fmtM(best.ele)}` : ''}
+        ${coordHTML(best.lat, best.lon)}`).openOn(map);
+    });
+    poly.on('mouseover', () => poly.setStyle({ weight: 7 }));
+    poly.on('mouseout', () => poly.setStyle({ weight: 4 }));
+    group.addLayer(poly);
+    // start / end markers
+    const first = line.pts[0], last = line.pts[line.pts.length - 1];
+    const endPopup = (label, p) => `<h4>${label}: ${esc(line.name || name)}</h4>${p.time && !isNaN(p.time) ? fmtDate(p.time) + '<br>' : ''}${p.ele != null && !isNaN(p.ele) ? 'Elev: ' + fmtM(p.ele) : ''}${coordHTML(p.lat, p.lon)}`;
+    group.addLayer(L.circleMarker([first.lat, first.lon], { bubblingMouseEvents:false, radius:5, color:'#fff', weight:2, fillColor:color, fillOpacity:1 }).bindTooltip('Start').bindPopup(endPopup('Start', first)));
+    group.addLayer(L.circleMarker([last.lat, last.lon], { bubblingMouseEvents:false, radius:5, color:color, weight:2, fillColor:'#fff', fillOpacity:1 }).bindTooltip('End').bindPopup(endPopup('End', last)));
+  });
+
+  parsed.wpts.forEach(w => {
+    const m = L.circleMarker([w.lat, w.lon], { bubblingMouseEvents:false, radius:6, color:'#fff', weight:2, fillColor:color, fillOpacity:1 });
+    m.bindPopup(`<h4>${esc(w.name || 'Waypoint')}</h4>${w.desc ? esc(w.desc) + '<br>' : ''}
+      ${w.time && !isNaN(w.time) ? fmtDate(w.time) + '<br>' : ''}${w.ele != null && !isNaN(w.ele) ? `Elev: ${fmtM(w.ele)}` : ''}
+      ${coordHTML(w.lat, w.lon)}`);
+    if (w.name) m.bindTooltip(esc(w.name));
+    group.addLayer(m);
+  });
+
+  group.addTo(map);
+  const entry = {
+    id: Date.now() + Math.random(), added: files.length ? Math.max(...files.map(f => f.added)) + 1 : 0,
+    date: parsed.date, name, color, layer: group, visible: true,
+    stats: statsList.length ? combine(statsList) : null,
+    counts: { tracks: parsed.lines.filter(l => l.kind === 'Track').length, routes: parsed.lines.filter(l => l.kind === 'Route').length, wpts: parsed.wpts.length }
+  };
+  files.push(entry);
+  render();
+  return entry;
+}
+
+function handleFiles(fileList) {
+  const all = Array.from(fileList);
+  const gpx = all.filter(f => /\.gpx$/i.test(f.name) || f.type.includes('gpx'));
+  if (!gpx.length) { toast('Please choose .gpx files'); return; }
+  if (gpx.length < all.length) toast(`Skipped ${all.length - gpx.length} non-GPX file${all.length - gpx.length > 1 ? 's' : ''}`);
+  let pending = gpx.length;
+  gpx.forEach(f => {
+    const r = new FileReader();
+    r.onload = () => { addFile(f.name, r.result); if (--pending === 0) fitAll(); };
+    r.onerror = () => { toast(`Couldn't read ${f.name}`); if (--pending === 0) fitAll(); };
+    r.readAsText(f);
+  });
+}
+
+// ---------- Sidebar ----------
+function render() {
+  const list = document.getElementById('list');
+  if (!files.length) { list.innerHTML = '<div class="empty">No files loaded yet.</div>'; return; }
+  list.innerHTML = '';
+  const mode = document.getElementById('sort').value;
+  const byDate = dir => (a, b) => {
+    if (!a.date && !b.date) return a.added - b.added;
+    if (!a.date) return 1; if (!b.date) return -1;   // undated files always last
+    return dir * (a.date - b.date);
+  };
+  const sorted = [...files].sort(
+    mode === 'date-asc' ? byDate(1) : mode === 'date-desc' ? byDate(-1)
+    : mode === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })
+    : (a, b) => a.added - b.added);
+  sorted.forEach(f => {
+    const s = f.stats;
+    const parts = [];
+    if (f.counts.tracks) parts.push(`${f.counts.tracks} track${f.counts.tracks > 1 ? 's' : ''}`);
+    if (f.counts.routes) parts.push(`${f.counts.routes} route${f.counts.routes > 1 ? 's' : ''}`);
+    if (f.counts.wpts) parts.push(`${f.counts.wpts} waypoint${f.counts.wpts > 1 ? 's' : ''}`);
+    const div = document.createElement('div');
+    div.className = 'item' + (f.visible ? '' : ' hidden');
+    div.innerHTML = `
+      <div class="row">
+        <button class="swatch" style="background:${f.color}" title="Change colour"></button>
+        <div class="name" title="${esc(f.name)}">${esc(f.name)}</div>
+        <button class="btn" data-a="zoom" title="Zoom to">⌖</button>
+        <button class="btn" data-a="toggle" title="Show/hide">${f.visible ? '👁' : '◌'}</button>
+        <button class="btn" data-a="remove" title="Remove">✕</button>
+      </div>
+      <div class="date">${f.date ? f.date.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' }) + ' · ' + f.date.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' }) : '<span class="nodate">No date in file</span>'}</div>
+      ${s ? `<div class="stats">
+        <span>Distance <b>${fmtKm(s.dist)}</b></span>
+        <span>Duration <b>${fmtDur(s.start && s.end ? s.end - s.start : 0)}</b></span>
+        <span>Gain <b>${fmtM(s.gain)}</b></span>
+        <span>Loss <b>${fmtM(s.loss)}</b></span>
+        <span>Min elev <b>${fmtM(s.minE)}</b></span>
+        <span>Max elev <b>${fmtM(s.maxE)}</b></span>
+      </div>` : ''}
+      <div class="sub">${parts.join(' · ')}</div>`;
+    div.querySelector('[data-a=zoom]').onclick = () => zoomTo(f);
+    div.querySelector('[data-a=toggle]').onclick = () => {
+      f.visible = !f.visible;
+      f.visible ? f.layer.addTo(map) : map.removeLayer(f.layer);
+      render();
+    };
+    div.querySelector('[data-a=remove]').onclick = () => {
+      map.removeLayer(f.layer);
+      files.splice(files.indexOf(f), 1);
+      render();
+    };
+    div.querySelector('.swatch').onclick = () => {
+      f.color = COLORS[(COLORS.indexOf(f.color) + 1) % COLORS.length];
+      f.layer.eachLayer(l => {
+        if (l instanceof L.Polyline) l.setStyle({ color: f.color });
+        else if (l.options.fillColor === '#fff') l.setStyle({ color: f.color });
+        else l.setStyle({ fillColor: f.color });
+      });
+      render();
+    };
+    list.appendChild(div);
+  });
+}
+
+function zoomTo(f) {
+  if (!f.visible) { f.visible = true; f.layer.addTo(map); render(); }
+  const b = f.layer.getBounds();
+  if (b.isValid()) map.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
+}
+function fitAll() {
+  const b = L.latLngBounds([]);
+  files.filter(f => f.visible).forEach(f => b.extend(f.layer.getBounds()));
+  if (b.isValid()) map.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+// ---------- Events ----------
+// iOS/Android often don't recognise .gpx and grey the files out when "accept" is set,
+// so on touch devices allow any file; non-GPX files are filtered out in handleFiles().
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+  document.getElementById('file').removeAttribute('accept');
+}
+document.getElementById('file').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
+document.getElementById('fitAll').onclick = fitAll;
+document.getElementById('sort').addEventListener('change', render);
+document.getElementById('clearAll').onclick = () => { files.forEach(f => map.removeLayer(f.layer)); files.length = 0; render(); };
+
+const drop = document.getElementById('drop');
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || !e.relatedTarget) drop.classList.remove('over'); }));
+document.addEventListener('drop', e => { if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>
