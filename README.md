@@ -2,8 +2,8 @@
 
 A single-page web app for viewing GPX, KML and KMZ files on a map. This is handy if you want to quickly review waypoints you took on your GPS after a field day and need to copy them. Load **one or more** files and see their
 tracks, routes and waypoints on a choice of basemaps, with distance, duration, elevation stats and
-coordinates in both lat/long and UTM. You can also fix a waypoint's name or position and export
-files as GPX or KML.
+coordinates in both lat/long and UTM. You can also edit, add and delete waypoints, and
+export files as GPX or KML.
 
 **Live site:** https://mclairewrazej-goatgirl.github.io/GPX-Viewer/
 
@@ -28,13 +28,22 @@ files as GPX or KML.
    - **Copy a value:** in any popup, click a number to copy just that number: the latitude, the
      longitude, the easting or the northing. You get digits only, without the zone or the E/N
      letters. For example, `11U 600165E 5670640N` copies as `600165` (easting) or `5670640` (northing).
-6. **Edit a waypoint.** Click a waypoint, then **✎ Edit waypoint**. You can change its name and its
-   position. Type a new latitude/longitude and the UTM boxes fill in automatically, or type a new
-   UTM zone, easting and northing and the latitude/longitude fill in. Pick the **hemisphere** (N for
-   anywhere in Canada) rather than the band letter. Click **Save** to move the point. Edits only
-   change the copy in your browser, so **export the file** afterwards to keep them.
+6. **Edit, add or delete waypoints.** Changes only affect the copy in your browser, so **export the
+   file** afterwards to keep them (see step 7).
+   - **Edit:** click a waypoint, then **✎ Edit**. You can change its name and position, then click
+     **Save**.
+   - **Add by typing coordinates:** click **+ Waypoint** on the file in the sidebar. A blank form
+     opens. Give it a name and type **either** the latitude and longitude **or** the UTM zone,
+     easting and northing. The other set fills in automatically as soon as yours is complete.
+     The UTM zone starts as the zone of the area you're looking at, so you can usually just type
+     the easting and northing.
+   - **Add by clicking the map:** click the spot on the map, then **+ Add waypoint here**. If more
+     than one file is loaded, pick which file it goes in first. The coordinates are already filled
+     in; add a name and click **Save**.
+   - **Delete:** click a waypoint, then **🗑 Delete**, and confirm.
+   - In the UTM boxes, pick the **hemisphere** (N for anywhere in Canada), not the band letter.
 7. **Export.** Each file has **Export GPX** and **KML** buttons, and **Export all as GPX / KML** at
-   the bottom saves every loaded file together in one file. Exports include any waypoint edits.
+   the bottom saves every loaded file together in one file. Exports include any waypoints you edited, added or deleted.
 
 ### What carries over between GPX and KML
 
