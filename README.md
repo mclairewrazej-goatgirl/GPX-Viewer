@@ -1,15 +1,17 @@
 # GPX Viewer
 
-A single-page web app for viewing GPX files on a map. This is handy if you want to quickly review waypoints you took on your GPS after a field day and need to copy them. Load **one or more** GPX files and see their
+A single-page web app for viewing GPX, KML and KMZ files on a map. This is handy if you want to quickly review waypoints you took on your GPS after a field day and need to copy them. Load **one or more** files and see their
 tracks, routes and waypoints on a choice of basemaps, with distance, duration, elevation stats and
-coordinates in both lat/long and UTM.
+coordinates in both lat/long and UTM. You can also fix a waypoint's name or position and export
+files as GPX or KML.
 
 **Live site:** https://mclairewrazej-goatgirl.github.io/GPX-Viewer/
 
 ## How to use it
 
-1. **Load files.** Click **Choose GPX files**, or drag one or more `.gpx` files onto the page.
-   You can load several at once; each gets its own colour. Want something to try first? Download
+1. **Load files.** Click **Choose GPX, KML or KMZ files**, or drag one or more `.gpx`, `.kml` or
+   `.kmz` files onto the page (KMZ is the zipped KML that Google Earth often saves). You can load
+   several at once; each gets its own colour. Want something to try first? Download
    [`samples/example.gpx`](samples/example.gpx) (a made-up hike near Banff, AB) and load it.
 2. **Sort.** Use the **Sort** menu in the sidebar to order files by date (oldest or newest first),
    by name, or in the order you added them. A file's date is the earliest timestamp in it, or the
@@ -26,13 +28,29 @@ coordinates in both lat/long and UTM.
    - **Copy a value:** in any popup, click a number to copy just that number: the latitude, the
      longitude, the easting or the northing. You get digits only, without the zone or the E/N
      letters. For example, `11U 600165E 5670640N` copies as `600165` (easting) or `5670640` (northing).
+6. **Edit a waypoint.** Click a waypoint, then **✎ Edit waypoint**. You can change its name and its
+   position. Type a new latitude/longitude and the UTM boxes fill in automatically, or type a new
+   UTM zone, easting and northing and the latitude/longitude fill in. Pick the **hemisphere** (N for
+   anywhere in Canada) rather than the band letter. Click **Save** to move the point. Edits only
+   change the copy in your browser, so **export the file** afterwards to keep them.
+7. **Export.** Each file has **Export GPX** and **KML** buttons, and **Export all as GPX / KML** at
+   the bottom saves every loaded file together in one file. Exports include any waypoint edits.
 
-Tracks are drawn as solid lines and routes as dashed lines. Start points are filled dots and end
+### What carries over between GPX and KML
+
+- Tracks, routes, waypoints, names, descriptions, elevations and times all carry over. KML tracks
+  keep their per-point times (saved as Google Earth `gx:Track`).
+- From KML, the app reads points, lines, `gx:Track`s and the outer edge of polygons (shown as
+  "areas"). It ignores KML styles, icons, folders, photos and network links.
+- GPX has no polygons, so areas become tracks when exported as GPX. Routes become plain lines in KML.
+- Most KML files have no timestamps, so their duration and date show as blank.
+
+Tracks and areas are drawn as solid lines and routes as dashed lines. Start points are filled dots and end
 points are hollow dots.
 
 ## Privacy
 
-Your GPX files never leave your browser. They are read and parsed entirely on your device with
+Your files never leave your browser. They are read and parsed entirely on your device with
 JavaScript; nothing is uploaded to any server. (The page does download map tiles from the basemap
 providers below, as any web map does, which tells them which area of the map you're viewing.)
 
