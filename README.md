@@ -38,14 +38,42 @@ providers below, as any web map does, which tells them which area of the map you
 
 ## Coordinates
 
-- **Lat/Long** is shown in decimal degrees (WGS84), to 6 decimal places.
-- **UTM** is calculated on the WGS84 ellipsoid. The zone is picked from the longitude (with the
-  standard exceptions for southern Norway and Svalbard). UTM isn't defined beyond 84°N or 80°S, so
-  "n/a (polar)" is shown there.
-- The letter after the zone number, for example the **U** in **11U**, is the **latitude band**, not
-  the hemisphere. Bands C–M are in the southern hemisphere and N–X in the northern, so **11U** is
-  the same as **zone 11N** (zone 11, northern hemisphere). Use "11N" if a tool or GPS asks for a
-  zone plus hemisphere.
+Every point is shown two ways. Here is the "Trailhead" waypoint from the sample file:
+
+```
+Lat/Long  51.178400, -115.567000
+UTM       11U 600165E 5670640N
+```
+
+**Lat/Long** (latitude and longitude, in degrees)
+
+| Part | Meaning |
+| --- | --- |
+| `51.178400` | Latitude: degrees north of the equator (a minus sign would mean south). |
+| `-115.567000` | Longitude: degrees east of Greenwich. The minus sign means **west**, which is normal for anywhere in Canada or the US. |
+
+**UTM** (a grid measured in metres)
+
+| Part | Meaning |
+| --- | --- |
+| `11` | The **zone**. UTM splits the world into 60 strips running north–south, each 6° of longitude wide. Banff is in zone 11. |
+| `U` | The **latitude band**, a row letter. It is *not* "north" or "south". Letters N to X are all in the northern hemisphere, and C to M are in the southern. |
+| `600165E` | The **easting**: metres east, measured within the zone. |
+| `5670640N` | The **northing**: metres north of the equator. |
+
+**If a GPS or app asks for "zone and hemisphere"**, enter zone **11** and hemisphere **N** (north).
+Don't enter the band letter there: band "U" is not a hemisphere, and in this format "11N" means
+"zone 11, north", not "band N".
+
+**Copying:** clicking the easting or northing copies only the digits (`600165` or `5670640`),
+without the zone or the E/N letters.
+
+**Good to know**
+
+- The coordinates use **WGS84**, the same system as GPS. NAD83 (used by most current Canadian and
+  US maps) matches WGS84 to within a metre or two. Older paper maps marked **NAD27** can be off by
+  about 200 m.
+- UTM doesn't cover the polar regions (beyond 84° N or 80° S), so "n/a (polar)" is shown there.
 
 ## Basemap sources and attribution
 
