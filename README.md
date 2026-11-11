@@ -23,6 +23,10 @@ coordinates in both lat/long and UTM.
    - Click anywhere on the map for a popup with that point's coordinates.
    - Click a track or route for its stats plus the time, elevation and coordinates of the nearest
      recorded point. Click a start/end dot or a waypoint for its details.
+   - **Copy** buttons next to the Lat/Long and UTM lines in any popup copy that coordinate to the
+     clipboard, exactly as shown (e.g. `51.1784, -115.5670` or `11U 600160E 5670640N`).
+6. **Set coordinate precision.** The **Lat/Long** and **UTM** menus in the sidebar set how
+   precisely coordinates are shown and copied. Your choice is remembered in this browser.
 
 Tracks are drawn as solid lines and routes as dashed lines. Start points are filled dots and end
 points are hollow dots.
@@ -35,7 +39,10 @@ providers below, as any web map does, which tells them which area of the map you
 
 ## Coordinates
 
-- **Lat/Long** is shown in decimal degrees (WGS84), to 6 decimal places.
+- **Lat/Long** is shown in decimal degrees (WGS84), to 2–7 decimal places (6 by default). One
+  decimal place more is roughly 10× finer: 4 dp ≈ 10 m, 5 dp ≈ 1 m, 6 dp ≈ 0.1 m.
+- **UTM** easting and northing are rounded to the nearest 1 m (default), 10 m, 100 m or 1 km. The
+  full number is always shown, e.g. at 100 m: `11U 600200E 5670600N`.
 - **UTM** is calculated on the WGS84 ellipsoid. The zone is picked from the longitude (with the
   standard exceptions for southern Norway and Svalbard). UTM isn't defined beyond 84°N or 80°S, so
   "n/a (polar)" is shown there.

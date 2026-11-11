@@ -24,7 +24,13 @@
   .date { font-size:12px; color:var(--accent); font-weight:600; margin-top:4px; }
   .nodate { color:var(--muted); font-weight:400; font-style:italic; }
   .coords { margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; line-height:1.5; }
-  .coords span { display:inline-block; width:58px; color:#888; font-family:system-ui,sans-serif; }
+  .coords .lbl { display:inline-block; width:58px; color:#888; font-family:system-ui,sans-serif; }
+  .coords .val { user-select:text; -webkit-user-select:text; }
+  .coords .copy { margin-left:4px; padding:0 6px; font-size:10px; line-height:16px; font-family:system-ui,sans-serif; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--accent); cursor:pointer; vertical-align:1px; }
+  .coords .copy:hover { border-color:var(--accent); background:#f1f7f3; }
+  .coords .copy.done { color:#fff; background:var(--accent); border-color:var(--accent); }
+  .precbar { display:grid; grid-template-columns:auto 1.4fr auto 1fr; align-items:center; gap:6px 8px; padding:0 16px 10px; font-size:12px; color:var(--muted); }
+  .precbar select { min-width:0; font-size:12px; padding:5px 4px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
   .readout { background:rgba(255,255,255,.92); padding:6px 10px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.2); }
   .readout .coords { margin:0; }
   #list { flex:1; overflow-y:auto; padding:0 16px 16px; }
@@ -68,6 +74,24 @@
         <option value="date-desc">Date: newest first</option>
         <option value="name">Name (A–Z)</option>
         <option value="added">Order added</option>
+      </select>
+    </div>
+    <div class="precbar" title="How precisely coordinates are shown and copied">
+      <label for="precLL">Lat/Long</label>
+      <select id="precLL">
+        <option value="2">2 dp ≈1 km</option>
+        <option value="3">3 dp ≈100 m</option>
+        <option value="4">4 dp ≈10 m</option>
+        <option value="5">5 dp ≈1 m</option>
+        <option value="6">6 dp ≈0.1 m</option>
+        <option value="7">7 dp ≈1 cm</option>
+      </select>
+      <label for="precUTM">UTM</label>
+      <select id="precUTM">
+        <option value="1">1 m</option>
+        <option value="10">10 m</option>
+        <option value="100">100 m</option>
+        <option value="1000">1 km</option>
       </select>
     </div>
     <div id="list"><div class="empty">No files loaded yet.</div></div>
@@ -130,7 +154,7 @@ L.control.scale({ imperial: false }).addTo(map);
 const Readout = L.Control.extend({
   options: { position: 'bottomright' },
   onAdd() { this._div = L.DomUtil.create('div', 'readout'); this._div.innerHTML = '<div class="coords">Move over the map</div>'; return this._div; },
-  update(ll) { this._div.innerHTML = coordHTML(ll.lat, ll.lng); }
+  update(ll) { this._div.innerHTML = coordHTML(ll.lat, ll.lng, false); }
 });
 const readout = new Readout().addTo(map);
 map.on('mousemove', e => readout.update(e.latlng));
@@ -207,13 +231,40 @@ function toUTM(lat, lon) {
   const band = 'CDEFGHJKLMNPQRSTUVWXX'[Math.floor((lat + 80) / 8)];
   return { zone, band, easting, northing };
 }
-function fmtLatLon(lat, lon) { return `${lat.toFixed(6)}, ${lon.toFixed(6)}`; }
+// Display precision: lat/long decimal places, UTM rounding step in metres (remembered in this browser)
+const PREC_KEY = 'gpxviewer.precision';
+const prec = { ll: 6, utm: 1 };
+try { const saved = JSON.parse(localStorage.getItem(PREC_KEY)); if (saved) Object.assign(prec, saved); } catch (e) {}
+
+function fmtLatLon(lat, lon) { return `${lat.toFixed(prec.ll)}, ${lon.toFixed(prec.ll)}`; }
 function fmtUTM(lat, lon) {
   const u = toUTM(lat, lon);
-  return u ? `${u.zone}${u.band} ${Math.round(u.easting)}E ${Math.round(u.northing)}N` : 'n/a (polar)';
+  if (!u) return 'n/a (polar)';
+  const r = v => Math.round(v / prec.utm) * prec.utm;
+  return `${u.zone}${u.band} ${r(u.easting)}E ${r(u.northing)}N`;
 }
-function coordHTML(lat, lon) {
-  return `<div class="coords"><span>Lat/Long</span> ${fmtLatLon(lat, lon)}<br><span>UTM</span> ${fmtUTM(lat, lon)}</div>`;
+function coordInner(lat, lon, copy) {
+  const row = (label, text) => `<span class="lbl">${label}</span> <span class="val">${text}</span>`
+    + (copy ? `<button type="button" class="copy" title="Copy ${label}">Copy</button>` : '');
+  return row('Lat/Long', fmtLatLon(lat, lon)) + '<br>' + row('UTM', fmtUTM(lat, lon));
+}
+function coordHTML(lat, lon, copy = true) {
+  return `<div class="coords" data-lat="${lat}" data-lon="${lon}"${copy ? ' data-copy="1"' : ''}>${coordInner(lat, lon, copy)}</div>`;
+}
+// Re-draw coordinates already on screen (e.g. an open popup) after a precision change
+function refreshCoords() {
+  document.querySelectorAll('.coords[data-lat]').forEach(el =>
+    el.innerHTML = coordInner(+el.dataset.lat, +el.dataset.lon, !!el.dataset.copy));
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  // Fallback for browsers/contexts without the async clipboard API
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  ta.remove(); return ok;
 }
 
 function haversine(a, b) {
@@ -294,13 +345,14 @@ function addFile(name, text) {
     // start / end markers
     const first = line.pts[0], last = line.pts[line.pts.length - 1];
     const endPopup = (label, p) => `<h4>${label}: ${esc(line.name || name)}</h4>${p.time && !isNaN(p.time) ? fmtDate(p.time) + '<br>' : ''}${p.ele != null && !isNaN(p.ele) ? 'Elev: ' + fmtM(p.ele) : ''}${coordHTML(p.lat, p.lon)}`;
-    group.addLayer(L.circleMarker([first.lat, first.lon], { bubblingMouseEvents:false, radius:5, color:'#fff', weight:2, fillColor:color, fillOpacity:1 }).bindTooltip('Start').bindPopup(endPopup('Start', first)));
-    group.addLayer(L.circleMarker([last.lat, last.lon], { bubblingMouseEvents:false, radius:5, color:color, weight:2, fillColor:'#fff', fillOpacity:1 }).bindTooltip('End').bindPopup(endPopup('End', last)));
+    group.addLayer(L.circleMarker([first.lat, first.lon], { bubblingMouseEvents:false, radius:5, color:'#fff', weight:2, fillColor:color, fillOpacity:1 }).bindTooltip('Start').bindPopup(() => endPopup('Start', first)));
+    group.addLayer(L.circleMarker([last.lat, last.lon], { bubblingMouseEvents:false, radius:5, color:color, weight:2, fillColor:'#fff', fillOpacity:1 }).bindTooltip('End').bindPopup(() => endPopup('End', last)));
   });
 
   parsed.wpts.forEach(w => {
     const m = L.circleMarker([w.lat, w.lon], { bubblingMouseEvents:false, radius:6, color:'#fff', weight:2, fillColor:color, fillOpacity:1 });
-    m.bindPopup(`<h4>${esc(w.name || 'Waypoint')}</h4>${w.desc ? esc(w.desc) + '<br>' : ''}
+    // Built on open (a function, not a string) so it always uses the current precision
+    m.bindPopup(() => `<h4>${esc(w.name || 'Waypoint')}</h4>${w.desc ? esc(w.desc) + '<br>' : ''}
       ${w.time && !isNaN(w.time) ? fmtDate(w.time) + '<br>' : ''}${w.ele != null && !isNaN(w.ele) ? `Elev: ${fmtM(w.ele)}` : ''}
       ${coordHTML(w.lat, w.lon)}`);
     if (w.name) m.bindTooltip(esc(w.name));
@@ -424,6 +476,28 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform
 document.getElementById('file').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
 document.getElementById('fitAll').onclick = fitAll;
 document.getElementById('sort').addEventListener('change', render);
+
+// Coordinate precision menus
+const precLL = document.getElementById('precLL'), precUTM = document.getElementById('precUTM');
+precLL.value = prec.ll; precUTM.value = prec.utm;
+if (!precLL.value) { prec.ll = 6; precLL.value = 6; }       // ignore bad saved values
+if (!precUTM.value) { prec.utm = 1; precUTM.value = 1; }
+[precLL, precUTM].forEach(sel => sel.addEventListener('change', () => {
+  prec.ll = +precLL.value; prec.utm = +precUTM.value;
+  try { localStorage.setItem(PREC_KEY, JSON.stringify(prec)); } catch (e) {}
+  refreshCoords();
+}));
+
+// Copy buttons in popups. Capture phase, because Leaflet stops clicks inside popups from bubbling.
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('button.copy');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  copyText(b.previousElementSibling.textContent).then(ok => {
+    b.textContent = ok ? 'Copied' : 'Copy failed'; b.classList.toggle('done', ok);
+    clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('done'); }, 1200);
+  });
+}, true);
 document.getElementById('clearAll').onclick = () => { files.forEach(f => map.removeLayer(f.layer)); files.length = 0; render(); };
 
 const drop = document.getElementById('drop');
