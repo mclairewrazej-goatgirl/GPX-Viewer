@@ -79,8 +79,7 @@ without the zone or the E/N letters.
 
 | Layer | Source | Attribution |
 | --- | --- | --- |
-| OpenStreetMap (CARTO) | CARTO Voyager tiles | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors © [CARTO](https://carto.com/attributions) |
-| OpenStreetMap (standard) | openstreetmap.org tiles | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors |
+| OpenStreetMap | openstreetmap.org tiles | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors |
 | OpenTopoMap | opentopomap.org | Map data © OpenStreetMap contributors, SRTM; style © [OpenTopoMap](https://opentopomap.org) (CC-BY-SA) |
 | Satellite (Esri) | Esri World Imagery | Imagery © Esri, Maxar, Earthstar Geographics |
 | Satellite (Sentinel-2, 10 m) | EOX Sentinel-2 cloudless 2020 | [Sentinel-2 cloudless](https://s2maps.eu) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2020) |
@@ -88,9 +87,9 @@ without the zone or the E/N letters.
 
 The map itself uses [Leaflet](https://leafletjs.com/) 1.9.4, loaded from cdnjs.
 
-When the page is opened from the website it starts on OpenStreetMap (standard); when `index.html`
-is opened as a local file it starts on OpenStreetMap (CARTO), because OSM's own tile servers block
-pages opened from `file://`.
+When the page is opened from the website it starts on OpenStreetMap; when `index.html` is opened
+as a local file it starts on OpenTopoMap, because OSM's own tile servers block pages opened from
+`file://`.
 
 ## Updating the site
 
