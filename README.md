@@ -1,6 +1,6 @@
 # GPX Viewer
 
-A single-page web app for viewing GPX files on a map. This is handy if you want to quickly review waypoints you took on your GPS after a field day and need to copy them. Load one or more GPX files and see their
+A single-page web app for viewing GPX files on a map. This is handy if you want to quickly review waypoints you took on your GPS after a field day and need to copy them. Load **one or more** GPX files and see their
 tracks, routes and waypoints on a choice of basemaps, with distance, duration, elevation stats and
 coordinates in both lat/long and UTM.
 
