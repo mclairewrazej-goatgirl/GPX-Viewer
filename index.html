@@ -50,6 +50,11 @@
   .exp button:hover { border-color:var(--accent); color:var(--accent); }
   .pbtn { display:block; margin-top:8px; font-size:12px; padding:4px 8px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
   .pbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .two > .pbtn { flex:1; }
+  .two { display:flex; gap:6px; }
+  .exp .sp { flex:1; }
+  .addhere label { display:block; font-size:11px; color:var(--muted); margin-top:4px; }
+  .addhere select { max-width:180px; font-size:11px; }
   .wedit label { display:block; font-size:11px; color:var(--muted); margin-top:4px; }
   .wedit input, .wedit select { display:block; width:100%; font-size:12px; padding:4px 5px; border:1px solid var(--line); border-radius:4px; margin-top:2px; font-family:inherit; }
   .wedit .two { display:flex; gap:6px; } .wedit .two > * { flex:1; }
@@ -155,8 +160,24 @@ const readout = new Readout().addTo(map);
 map.on('mousemove', e => readout.update(e.latlng));
 
 // Click anywhere on the map for a coordinate popup
+// When files are loaded, the popup can also add a waypoint at that spot.
 map.on('click', e => {
-  L.popup().setLatLng(e.latlng).setContent(`<h4>Location</h4>${coordHTML(e.latlng.lat, e.latlng.lng)}`).openOn(map);
+  const div = document.createElement('div');
+  div.innerHTML = `<h4>Location</h4>${coordHTML(e.latlng.lat, e.latlng.lng)}`;
+  if (files.length) {
+    const add = document.createElement('div');
+    add.className = 'addhere';
+    add.innerHTML = files.length === 1
+      ? `<button class="pbtn" type="button">+ Add waypoint here</button>`
+      : `<button class="pbtn" type="button">+ Add waypoint here</button><label>to <select>${files.map((f, i) => `<option value="${i}">${esc(f.name)}</option>`).join('')}</select></label>`;
+    add.querySelector('button').onclick = () => {
+      const sel = add.querySelector('select');
+      addWaypoint(files[sel ? +sel.value : 0], e.latlng);
+    };
+    div.appendChild(add);
+    L.DomEvent.disableClickPropagation(div);
+  }
+  L.popup().setLatLng(e.latlng).setContent(div).openOn(map);
 });
 
 // ---------- GPX parsing ----------
@@ -525,97 +546,135 @@ function addFile(name, parsed) {
     group.addLayer(L.circleMarker([last.lat, last.lon], { bubblingMouseEvents:false, radius:5, color:color, weight:2, fillColor:'#fff', fillOpacity:1 }).bindTooltip('End').bindPopup(endPopup('End', last)));
   });
 
-  parsed.wpts.forEach(w => group.addLayer(waypointMarker(w, color)));
-
   group.addTo(map);
   const entry = {
     id: Date.now() + Math.random(), added: files.length ? Math.max(...files.map(f => f.added)) + 1 : 0,
     date: parsed.date, name, color, layer: group, visible: true, data: parsed,
     stats: statsList.length ? combine(statsList) : null,
-    counts: { tracks: parsed.lines.filter(l => l.kind === 'Track').length, routes: parsed.lines.filter(l => l.kind === 'Route').length, areas: parsed.lines.filter(l => l.kind === 'Area').length, wpts: parsed.wpts.length }
+    counts: { tracks: parsed.lines.filter(l => l.kind === 'Track').length, routes: parsed.lines.filter(l => l.kind === 'Route').length, areas: parsed.lines.filter(l => l.kind === 'Area').length }
   };
+  parsed.wpts.forEach(w => group.addLayer(waypointMarker(w, entry)));
   files.push(entry);
   render();
   return entry;
 }
 
-// ---------- Waypoints (with editing) ----------
-// The waypoint object `w` is the same one export uses, so edits are included when you export.
-function waypointMarker(w, color) {
-  const m = L.circleMarker([w.lat, w.lon], { bubblingMouseEvents:false, radius:6, color:'#fff', weight:2, fillColor:color, fillOpacity:1 });
+// ---------- Waypoints (edit, add, delete) ----------
+// Waypoint objects live in file.data.wpts, which export reads, so edits, additions and
+// deletions are all included when you export.
+
+// The form used both to edit a waypoint and to add a new one. Typing lat/long fills in UTM,
+// and typing UTM fills in lat/long. w may have no lat/lon yet (new waypoint with blank fields).
+function waypointForm(title, w, onSave, onCancel) {
+  const has = isFinite(w.lat) && isFinite(w.lon);
+  const u = has ? toUTM(w.lat, w.lon) : null;
+  const centre = map.getCenter(), cu = toUTM(centre.lat, centre.lng);
+  const div = document.createElement('div');
+  div.className = 'wedit';
+  div.innerHTML = `<h4>${esc(title)}</h4>
+    <label>Name<input data-f="name" value="${esc(w.name || '')}"></label>
+    <div class="grp">Lat/Long (decimal degrees)</div>
+    <div class="two"><label>Latitude<input data-f="lat" inputmode="decimal" placeholder="e.g. 51.178400" value="${has ? w.lat.toFixed(6) : ''}"></label>
+      <label>Longitude<input data-f="lon" inputmode="decimal" placeholder="e.g. -115.567000" value="${has ? w.lon.toFixed(6) : ''}"></label></div>
+    <div class="grp">UTM</div>
+    <div class="two"><label>Zone<input data-f="zone" inputmode="numeric" value="${u ? u.zone : cu ? cu.zone : ''}"></label>
+      <label>Hemisphere<select data-f="hemi"><option value="N">N (north)</option><option value="S"${(has ? w.lat : centre.lat) < 0 ? ' selected' : ''}>S (south)</option></select></label></div>
+    <div class="two"><label>Easting<input data-f="e" inputmode="numeric" value="${u ? Math.round(u.easting) : ''}"></label>
+      <label>Northing<input data-f="n" inputmode="numeric" value="${u ? Math.round(u.northing) : ''}"></label></div>
+    <div class="msg"></div>
+    <div class="two"><button type="button" data-a="save">Save</button><button type="button" data-a="cancel">Cancel</button></div>`;
+  const f = k => div.querySelector(`[data-f=${k}]`);
+  const msg = div.querySelector('.msg');
+  const num = k => { const v = f(k).value.trim(); return v === '' ? NaN : Number(v); };
+  const blank = (...ks) => ks.some(k => f(k).value.trim() === '');
+  const llOk = (lat, lon) => isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  const fromLL = () => {
+    if (blank('lat', 'lon')) { msg.textContent = ''; return; }   // wait until both are typed
+    const lat = num('lat'), lon = num('lon');
+    if (!llOk(lat, lon)) { msg.textContent = 'Latitude must be -90 to 90 and longitude -180 to 180.'; return; }
+    msg.textContent = '';
+    const u = toUTM(lat, lon);
+    if (!u) { msg.textContent = 'UTM not available this close to the poles.'; return; }
+    f('zone').value = u.zone; f('hemi').value = lat < 0 ? 'S' : 'N';
+    f('e').value = Math.round(u.easting); f('n').value = Math.round(u.northing);
+  };
+  const fromUTMFields = () => {
+    if (blank('zone', 'e', 'n')) { msg.textContent = ''; return; }
+    const zone = num('zone'), e = num('e'), n = num('n');
+    if (!(Number.isInteger(zone) && zone >= 1 && zone <= 60) || !isFinite(e) || !isFinite(n) || e < 100000 || e > 900000 || n < 0 || n > 10000000) {
+      msg.textContent = 'Zone must be 1 to 60, easting about 100000 to 900000, and northing 0 to 10000000.'; return;
+    }
+    msg.textContent = '';
+    const ll = fromUTM(zone, f('hemi').value, e, n);
+    f('lat').value = ll.lat.toFixed(6); f('lon').value = ll.lon.toFixed(6);
+  };
+  ['lat','lon'].forEach(k => f(k).addEventListener('input', fromLL));
+  ['zone','e','n'].forEach(k => f(k).addEventListener('input', fromUTMFields));
+  f('hemi').addEventListener('change', fromUTMFields);
+  div.querySelector('[data-a=cancel]').onclick = onCancel;
+  div.querySelector('[data-a=save]').onclick = () => {
+    const lat = num('lat'), lon = num('lon');
+    if (!llOk(lat, lon)) { msg.textContent = 'Enter a latitude and longitude, or a UTM zone, easting and northing.'; return; }
+    onSave({ name: f('name').value.trim(), lat, lon });
+  };
+  // Stop map shortcuts (like +/-) and clicks from firing while typing
+  L.DomEvent.disableClickPropagation(div);
+  div.addEventListener('keydown', e => e.stopPropagation());
+  return div;
+}
+
+function waypointMarker(w, file) {
+  const m = L.circleMarker([w.lat, w.lon], { bubblingMouseEvents:false, radius:6, color:'#fff', weight:2, fillColor:file.color, fillOpacity:1 });
   const view = () => {
     const div = document.createElement('div');
     div.innerHTML = `<h4>${esc(w.name || 'Waypoint')}</h4>${w.desc ? esc(w.desc) + '<br>' : ''}
       ${w.time && !isNaN(w.time) ? fmtDate(w.time) + '<br>' : ''}${w.ele != null && !isNaN(w.ele) ? `Elev: ${fmtM(w.ele)}` : ''}
-      ${coordHTML(w.lat, w.lon)}<button class="pbtn" type="button">✎ Edit waypoint</button>`;
-    div.querySelector('.pbtn').onclick = () => m.setPopupContent(editor());
-    // The button is gone once the editor replaces it, so stop the click here or the map
-    // would treat it as a click on the map and open a "Location" popup instead.
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  };
-  const editor = () => {
-    const u = toUTM(w.lat, w.lon);
-    const div = document.createElement('div');
-    div.className = 'wedit';
-    div.innerHTML = `<h4>Edit waypoint</h4>
-      <label>Name<input data-f="name" value="${esc(w.name || '')}"></label>
-      <div class="grp">Lat/Long (decimal degrees)</div>
-      <div class="two"><label>Latitude<input data-f="lat" inputmode="decimal" value="${w.lat.toFixed(6)}"></label>
-        <label>Longitude<input data-f="lon" inputmode="decimal" value="${w.lon.toFixed(6)}"></label></div>
-      <div class="grp">UTM</div>
-      <div class="two"><label>Zone<input data-f="zone" inputmode="numeric" value="${u ? u.zone : ''}"></label>
-        <label>Hemisphere<select data-f="hemi"><option value="N">N (north)</option><option value="S"${w.lat < 0 ? ' selected' : ''}>S (south)</option></select></label></div>
-      <div class="two"><label>Easting<input data-f="e" inputmode="numeric" value="${u ? Math.round(u.easting) : ''}"></label>
-        <label>Northing<input data-f="n" inputmode="numeric" value="${u ? Math.round(u.northing) : ''}"></label></div>
-      <div class="msg"></div>
-      <div class="two"><button type="button" data-a="save">Save</button><button type="button" data-a="cancel">Cancel</button></div>`;
-    const f = k => div.querySelector(`[data-f=${k}]`);
-    const msg = div.querySelector('.msg');
-    const num = k => { const v = f(k).value.trim(); return v === '' ? NaN : Number(v); };
-    const llOk = (lat, lon) => isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
-    // Typing in one system fills in the other
-    const fromLL = () => {
-      const lat = num('lat'), lon = num('lon');
-      if (!llOk(lat, lon)) { msg.textContent = 'Latitude must be -90 to 90 and longitude -180 to 180.'; return; }
-      msg.textContent = '';
-      const u = toUTM(lat, lon);
-      if (!u) { msg.textContent = 'UTM not available this close to the poles.'; return; }
-      f('zone').value = u.zone; f('hemi').value = lat < 0 ? 'S' : 'N';
-      f('e').value = Math.round(u.easting); f('n').value = Math.round(u.northing);
-    };
-    const fromUTMFields = () => {
-      const zone = num('zone'), e = num('e'), n = num('n');
-      if (!(Number.isInteger(zone) && zone >= 1 && zone <= 60) || !isFinite(e) || !isFinite(n) || e < 100000 || e > 900000 || n < 0 || n > 10000000) {
-        msg.textContent = 'Zone must be 1 to 60, easting about 100000 to 900000, and northing 0 to 10000000.'; return;
-      }
-      msg.textContent = '';
-      const ll = fromUTM(zone, f('hemi').value, e, n);
-      f('lat').value = ll.lat.toFixed(6); f('lon').value = ll.lon.toFixed(6);
-    };
-    ['lat','lon'].forEach(k => f(k).addEventListener('input', fromLL));
-    ['zone','e','n'].forEach(k => f(k).addEventListener('input', fromUTMFields));
-    f('hemi').addEventListener('change', fromUTMFields);
-    div.querySelector('[data-a=cancel]').onclick = () => m.setPopupContent(view());
-    div.querySelector('[data-a=save]').onclick = () => {
-      const lat = num('lat'), lon = num('lon');
-      if (!llOk(lat, lon)) { msg.textContent = 'Please fix the coordinates before saving.'; return; }
-      w.name = f('name').value.trim(); w.lat = lat; w.lon = lon;
-      m.setLatLng([lat, lon]);
+      ${coordHTML(w.lat, w.lon)}
+      <div class="two"><button class="pbtn" type="button" data-a="edit">✎ Edit</button><button class="pbtn" type="button" data-a="del">🗑 Delete</button></div>`;
+    div.querySelector('[data-a=edit]').onclick = () => m.setPopupContent(waypointForm('Edit waypoint', w, v => {
+      Object.assign(w, v);
+      m.setLatLng([w.lat, w.lon]);
       m.unbindTooltip(); if (w.name) m.bindTooltip(esc(w.name));
       m.setPopupContent(view());
-      m.getPopup().setLatLng([lat, lon]);
+      m.getPopup().setLatLng([w.lat, w.lon]);
       toast('Waypoint updated. Use Export to save a copy of the file.');
+    }, () => m.setPopupContent(view())));
+    div.querySelector('[data-a=del]').onclick = () => {
+      if (!confirm(`Delete waypoint "${w.name || 'Waypoint'}" from ${file.name}?`)) return;
+      file.data.wpts.splice(file.data.wpts.indexOf(w), 1);
+      file.layer.removeLayer(m);
+      render();
+      toast('Waypoint deleted. Use Export to save a copy of the file.');
     };
-    // Stop map shortcuts (like +/-) and clicks from firing while typing
+    // The buttons are gone once their popup content is replaced, so stop clicks here or the map
+    // would treat them as clicks on the map and open a "Location" popup instead.
     L.DomEvent.disableClickPropagation(div);
-    div.addEventListener('keydown', e => e.stopPropagation());
     return div;
   };
   m.bindPopup(view, { minWidth: 230 });
   m.on('popupclose', () => m.setPopupContent(view));
   if (w.name) m.bindTooltip(esc(w.name));
   return m;
+}
+
+// Add a new waypoint to a file. With a position (a map click) the form starts filled in;
+// without one it starts blank at the map centre for the person to type coordinates.
+function addWaypoint(file, latlng) {
+  const w = { lat: latlng ? latlng.lat : NaN, lon: latlng ? latlng.lng : NaN, ele: null, time: null, name: '', desc: '' };
+  const popup = L.popup({ minWidth: 230 }).setLatLng(latlng || map.getCenter());
+  popup.setContent(waypointForm(`New waypoint in ${file.name}`, w, v => {
+    Object.assign(w, v);
+    file.data.wpts.push(w);
+    const m = waypointMarker(w, file);
+    file.layer.addLayer(m);
+    if (!file.visible) { file.visible = true; file.layer.addTo(map); }
+    map.closePopup(popup);
+    render();
+    if (!map.getBounds().contains([w.lat, w.lon])) map.panTo([w.lat, w.lon]);
+    m.openPopup();
+    toast('Waypoint added. Use Export to save a copy of the file.');
+  }, () => map.closePopup(popup)));
+  popup.openOn(map);
 }
 
 function handleFiles(fileList) {
@@ -655,7 +714,8 @@ function render() {
     if (f.counts.tracks) parts.push(`${f.counts.tracks} track${f.counts.tracks > 1 ? 's' : ''}`);
     if (f.counts.routes) parts.push(`${f.counts.routes} route${f.counts.routes > 1 ? 's' : ''}`);
     if (f.counts.areas) parts.push(`${f.counts.areas} area${f.counts.areas > 1 ? 's' : ''}`);
-    if (f.counts.wpts) parts.push(`${f.counts.wpts} waypoint${f.counts.wpts > 1 ? 's' : ''}`);
+    const nw = f.data.wpts.length;
+    if (nw) parts.push(`${nw} waypoint${nw > 1 ? 's' : ''}`);
     const div = document.createElement('div');
     div.className = 'item' + (f.visible ? '' : ' hidden');
     div.innerHTML = `
@@ -676,10 +736,12 @@ function render() {
         <span>Max elev <b>${fmtM(s.maxE)}</b></span>
       </div>` : ''}
       <div class="sub">${parts.join(' · ')}</div>
-      <div class="exp">Export <button data-a="gpx">GPX</button><button data-a="kml">KML</button></div>`;
+      <div class="exp">Export <button data-a="gpx">GPX</button><button data-a="kml">KML</button>
+        <span class="sp"></span><button data-a="addw" title="Add a waypoint to this file by typing its coordinates">+ Waypoint</button></div>`;
     div.querySelector('[data-a=zoom]').onclick = () => zoomTo(f);
     div.querySelector('[data-a=gpx]').onclick = () => exportFiles([f], 'gpx');
     div.querySelector('[data-a=kml]').onclick = () => exportFiles([f], 'kml');
+    div.querySelector('[data-a=addw]').onclick = () => addWaypoint(f);
     div.querySelector('[data-a=toggle]').onclick = () => {
       f.visible = !f.visible;
       f.visible ? f.layer.addTo(map) : map.removeLayer(f.layer);
